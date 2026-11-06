@@ -1,0 +1,6 @@
+{
+  "name": "Lumina Studio - Plataforma Profesional de Galerías Fotográficas",
+  "description": "Plataforma web profesional para fotógrafos con 20 modalidades de presentación, 20 plantillas temáticas, editor visual, entrega a clientes y descarga ZIP de alta resolución.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
