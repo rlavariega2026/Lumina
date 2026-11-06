@@ -1,0 +1,70 @@
+name: Verify Hostinger Lumina FTP location
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/verify-hostinger-path.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-ftp:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect FTP directories without changing files
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+        run: |
+          python - <<'PY'
+          import os
+          from ftplib import FTP, error_perm
+
+          ftp = FTP()
+          ftp.connect(os.environ["FTP_SERVER"], int(os.environ.get("FTP_PORT", "21")), timeout=30)
+          ftp.login(os.environ["FTP_USERNAME"], os.environ["FTP_PASSWORD"])
+          print("LOGIN PWD:", ftp.pwd())
+
+          def inspect(path):
+              print("\\nDIRECTORY:", repr(path))
+              try:
+                  entries = ftp.nlst(path)
+                  for entry in entries:
+                      print(" ", entry)
+                  if not entries:
+                      print("  [EMPTY]")
+              except Exception as exc:
+                  print("  [ERROR]", repr(exc))
+
+          inspect(".")
+          inspect("Lumina")
+          inspect("public_html")
+          inspect("public_html/Lumina")
+          try:
+              ftp.cwd("Lumina")
+              print("\\nCWD Lumina SUCCESS; PWD:", ftp.pwd())
+              inspect(".")
+              ftp.cwd("..")
+          except Exception as exc:
+              print("\\nCWD Lumina FAILED:", repr(exc))
+          try:
+              ftp.cwd("public_html")
+              print("\\nCWD public_html SUCCESS; PWD:", ftp.pwd())
+              inspect(".")
+              try:
+                  ftp.cwd("Lumina")
+                  print("CWD public_html/Lumina SUCCESS; PWD:", ftp.pwd())
+                  inspect(".")
+              except Exception as exc:
+                  print("CWD public_html/Lumina FAILED:", repr(exc))
+          except Exception as exc:
+              print("\\nCWD public_html FAILED:", repr(exc))
+
+          ftp.quit()
+          PY
