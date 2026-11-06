@@ -1,0 +1,53 @@
+name: Deploy Lumina to Hostinger
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lumina-hostinger-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Lumina repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build production application
+        run: npm run build
+
+      - name: Verify production output
+        run: |
+          test -f dist/index.html
+          test -d dist/assets
+          echo "Lumina production build verified."
+
+      - name: Deploy only to public_html/Lumina
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT }}
+          protocol: ftp
+          local-dir: dist/
+          server-dir: public_html/Lumina/
+          dangerous-clean-slate: false
+          exclude: |
+            **/.htaccess
