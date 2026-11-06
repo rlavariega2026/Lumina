@@ -35,37 +35,19 @@ jobs:
         run: |
           test -f dist/index.html
           test -d dist/assets
+          echo "Lumina production build verified."
 
-      - name: Inspect FTP account root to identify the real website directory
-        env:
-          FTP_SERVER: ${{ secrets.FTP_SERVER }}
-          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-          FTP_PORT: ${{ secrets.FTP_PORT }}
-        run: |
-          npm install --no-save basic-ftp
-          node --input-type=module <<'NODE'
-          import { Client } from 'basic-ftp';
-          const client = new Client();
-          client.ftp.verbose = false;
-          try {
-            await client.access({
-              host: process.env.FTP_SERVER,
-              user: process.env.FTP_USERNAME,
-              password: process.env.FTP_PASSWORD,
-              port: Number(process.env.FTP_PORT || 21),
-              secure: false
-            });
-            console.log('FTP CURRENT DIRECTORY:', await client.pwd());
-            const entries = await client.list();
-            console.log('FTP ROOT CONTENTS:');
-            for (const entry of entries) {
-              console.log((entry.isDirectory ? '[DIR] ' : '[FILE] ') + entry.name);
-            }
-          } finally {
-            client.close();
-          }
-          NODE
-
-      - name: Stop before uploading until the FTP root is verified
-        run: echo "Diagnostic only. No website files were changed in this run."
+      - name: Deploy Lumina to the actual website root subfolder
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT }}
+          protocol: ftp
+          local-dir: dist/
+          # FTP login starts in /public_html, so use Lumina/ (not public_html/Lumina/).
+          server-dir: Lumina/
+          dangerous-clean-slate: false
+          exclude: |
+            **/.htaccess
