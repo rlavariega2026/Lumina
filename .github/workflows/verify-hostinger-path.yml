@@ -1,21 +1,14 @@
-name: Verify Hostinger Lumina FTP location
-
+name: Verify actual domain folder
 on:
   push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/verify-hostinger-path.yml"
+    branches: [main]
+    paths: [".github/workflows/verify-hostinger-path.yml"]
   workflow_dispatch:
-
-permissions:
-  contents: read
-
 jobs:
-  inspect-ftp:
+  inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect account and domain roots without changing files
+      - name: List actual website directory
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
@@ -25,38 +18,20 @@ jobs:
           python - <<'PY'
           import os
           from ftplib import FTP
-
-          ftp = FTP()
-          ftp.connect(os.environ["FTP_SERVER"], int(os.environ.get("FTP_PORT", "21")), timeout=30)
-          ftp.login(os.environ["FTP_USERNAME"], os.environ["FTP_PASSWORD"])
-          print("LOGIN PWD:", ftp.pwd())
-
-          def inspect(path):
-              print("\\nDIRECTORY:", repr(path), "FROM", ftp.pwd())
-              try:
-                  for entry in ftp.nlst(path):
-                      print(" ", entry)
-              except Exception as exc:
-                  print("  [ERROR]", repr(exc))
-
-          inspect(".")
-          inspect("..")
-          inspect("../domains")
-          inspect("../domains/lavdigitalagency.com")
-          inspect("../domains/lavdigitalagency.com/public_html")
-          inspect("domains")
-          inspect("domains/lavdigitalagency.com")
-          inspect("domains/lavdigitalagency.com/public_html")
-          inspect("Lumina")
-          inspect("public_html/Lumina")
-
-          for path in ["..", "../domains", "../domains/lavdigitalagency.com", "../domains/lavdigitalagency.com/public_html", "domains", "domains/lavdigitalagency.com", "domains/lavdigitalagency.com/public_html"]:
-              try:
-                  ftp.cwd(path)
-                  print("\\nCWD SUCCESS:", path, "=>", ftp.pwd())
-                  inspect(".")
-              except Exception as exc:
-                  print("\\nCWD FAILED:", path, repr(exc))
-
-          ftp.quit()
+          f=FTP()
+          f.connect(os.environ["FTP_SERVER"],int(os.environ["FTP_PORT"]),timeout=20)
+          f.login(os.environ["FTP_USERNAME"],os.environ["FTP_PASSWORD"])
+          print("PWD",f.pwd())
+          f.cwd("/")
+          print("ROOT",f.nlst("."))
+          f.cwd("/domains/lavdigitalagency.com")
+          print("DOMAIN",f.pwd(),f.nlst("."))
+          f.cwd("public_html")
+          print("WEBROOT",f.pwd(),f.nlst("."))
+          try:
+              f.cwd("Lumina")
+              print("WEBROOT/Lumina",f.pwd(),f.nlst("."))
+          except Exception as e:
+              print("WEBROOT/Lumina MISSING",repr(e))
+          f.quit()
           PY
