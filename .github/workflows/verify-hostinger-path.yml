@@ -15,7 +15,7 @@ jobs:
   inspect-ftp:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect FTP directories without changing files
+      - name: Inspect account and domain roots without changing files
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
@@ -24,7 +24,7 @@ jobs:
         run: |
           python - <<'PY'
           import os
-          from ftplib import FTP, error_perm
+          from ftplib import FTP
 
           ftp = FTP()
           ftp.connect(os.environ["FTP_SERVER"], int(os.environ.get("FTP_PORT", "21")), timeout=30)
@@ -32,39 +32,31 @@ jobs:
           print("LOGIN PWD:", ftp.pwd())
 
           def inspect(path):
-              print("\\nDIRECTORY:", repr(path))
+              print("\\nDIRECTORY:", repr(path), "FROM", ftp.pwd())
               try:
-                  entries = ftp.nlst(path)
-                  for entry in entries:
+                  for entry in ftp.nlst(path):
                       print(" ", entry)
-                  if not entries:
-                      print("  [EMPTY]")
               except Exception as exc:
                   print("  [ERROR]", repr(exc))
 
           inspect(".")
+          inspect("..")
+          inspect("../domains")
+          inspect("../domains/lavdigitalagency.com")
+          inspect("../domains/lavdigitalagency.com/public_html")
+          inspect("domains")
+          inspect("domains/lavdigitalagency.com")
+          inspect("domains/lavdigitalagency.com/public_html")
           inspect("Lumina")
-          inspect("public_html")
           inspect("public_html/Lumina")
-          try:
-              ftp.cwd("Lumina")
-              print("\\nCWD Lumina SUCCESS; PWD:", ftp.pwd())
-              inspect(".")
-              ftp.cwd("..")
-          except Exception as exc:
-              print("\\nCWD Lumina FAILED:", repr(exc))
-          try:
-              ftp.cwd("public_html")
-              print("\\nCWD public_html SUCCESS; PWD:", ftp.pwd())
-              inspect(".")
+
+          for path in ["..", "../domains", "../domains/lavdigitalagency.com", "../domains/lavdigitalagency.com/public_html", "domains", "domains/lavdigitalagency.com", "domains/lavdigitalagency.com/public_html"]:
               try:
-                  ftp.cwd("Lumina")
-                  print("CWD public_html/Lumina SUCCESS; PWD:", ftp.pwd())
+                  ftp.cwd(path)
+                  print("\\nCWD SUCCESS:", path, "=>", ftp.pwd())
                   inspect(".")
               except Exception as exc:
-                  print("CWD public_html/Lumina FAILED:", repr(exc))
-          except Exception as exc:
-              print("\\nCWD public_html FAILED:", repr(exc))
+                  print("\\nCWD FAILED:", path, repr(exc))
 
           ftp.quit()
           PY
