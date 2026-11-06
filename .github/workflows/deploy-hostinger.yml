@@ -51,3 +51,30 @@ jobs:
           dangerous-clean-slate: false
           exclude: |
             **/.htaccess
+
+      - name: Verify files in the actual Hostinger document root
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+        run: |
+          python - <<'PY'
+          import os
+          from ftplib import FTP
+
+          ftp = FTP()
+          ftp.connect(os.environ["FTP_SERVER"], int(os.environ["FTP_PORT"]), timeout=30)
+          ftp.login(os.environ["FTP_USERNAME"], os.environ["FTP_PASSWORD"])
+          ftp.cwd("/domains/lavdigitalagency.com/public_html/Lumina")
+          entries = ftp.nlst(".")
+          print("VERIFIED REMOTE DIRECTORY:", ftp.pwd())
+          for entry in entries:
+              print("REMOTE FILE:", entry)
+          required = ["index.html", "assets"]
+          missing = [name for name in required if name not in entries]
+          if missing:
+              raise SystemExit("Deployment verification failed; missing: " + ", ".join(missing))
+          print("HOSTINGER FILE VERIFICATION PASSED")
+          ftp.quit()
+          PY
