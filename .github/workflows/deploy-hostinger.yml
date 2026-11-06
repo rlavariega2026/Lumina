@@ -37,7 +37,7 @@ jobs:
           test -d dist/assets
           echo "Lumina production build verified."
 
-      - name: Deploy Lumina to the actual website root subfolder
+      - name: Deploy to lavdigitalagency.com actual document root
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -46,8 +46,8 @@ jobs:
           port: ${{ secrets.FTP_PORT }}
           protocol: ftp
           local-dir: dist/
-          # FTP login starts in /public_html, so use Lumina/ (not public_html/Lumina/).
-          server-dir: Lumina/
+          # FTP login starts at /public_html; the real domain document root is /domains/lavdigitalagency.com/public_html.
+          server-dir: ../domains/lavdigitalagency.com/public_html/Lumina/
           dangerous-clean-slate: false
           exclude: |
             **/.htaccess
