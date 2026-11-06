@@ -5,6 +5,9 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // The application is published at https://lavdigitalagency.com/Lumina/
+    // Keep all generated asset URLs inside this subdirectory.
+    base: '/Lumina/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
