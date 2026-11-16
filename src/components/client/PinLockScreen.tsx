@@ -10,19 +10,28 @@ interface PinLockScreenProps {
   galleryName: string;
   expectedPin?: string;
   onUnlock: () => void;
+  verifyPin?: (pin: string) => Promise<void>;
 }
 
 export const PinLockScreen: React.FC<PinLockScreenProps> = ({
   galleryName,
   expectedPin,
   onUnlock,
+  verifyPin,
 }) => {
   const [pin, setPin] = useState('');
   const [hasError, setHasError] = useState(false);
+  const [pinError, setPinError] = useState('');
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!expectedPin || pin.trim() === expectedPin.trim() || pin.trim() === '1234') {
+    if (verifyPin) {
+      try { await verifyPin(pin.trim()); onUnlock(); }
+      catch (error) {
+        setPinError(error instanceof Error ? error.message : 'PIN incorrecto.');
+        setHasError(true);
+      }
+    } else if (expectedPin && pin.trim() === expectedPin.trim()) {
       onUnlock();
     } else {
       setHasError(true);
@@ -78,7 +87,7 @@ export const PinLockScreen: React.FC<PinLockScreenProps> = ({
 
         {hasError && (
           <p className="text-xs font-medium text-rose-400 animate-in fade-in">
-            PIN incorrecto. Por favor, verifica e intenta nuevamente.
+            {pinError || 'PIN incorrecto. Por favor, verifica e intenta nuevamente.'}
           </p>
         )}
 

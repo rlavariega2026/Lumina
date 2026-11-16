@@ -1,3 +1,4 @@
+import { deleteCloudGallery, syncGallery } from '../../services/cloud';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -395,6 +396,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
 
     await storageService.saveGallery(newGallery);
+    try { await syncGallery(newGallery); } catch (error) { showToast(error instanceof Error ? error.message : 'No se pudo guardar en Hostinger'); return; }
     await loadGalleries();
     setShowCreateModal(false);
     showToast(`Galería «${finalEventName}» creada con éxito`);
@@ -404,6 +406,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleDuplicate = async (id: string) => {
     const copy = await storageService.duplicateGallery(id);
     if (copy) {
+      try { await syncGallery(copy); } catch (error) { showToast(error instanceof Error ? error.message : 'No se pudo guardar la copia'); return; }
       await loadGalleries();
       showToast(`Copia creada: «${copy.eventName}»`);
     }
@@ -418,6 +421,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
+      try { await deleteCloudGallery(deleteTarget.id); } catch (error) { showToast(error instanceof Error ? error.message : 'No se pudo eliminar'); return; }
       await storageService.deleteGallery(deleteTarget.id);
       await loadGalleries();
       showToast(`Galería «${deleteTarget.name}» eliminada`);
@@ -430,10 +434,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const togglePublish = async (g: GalleryItem) => {
-    const updated = { ...g, isPublished: !g.isPublished };
-    await storageService.saveGallery(updated);
-    await loadGalleries();
-    showToast(updated.isPublished ? 'Galería publicada' : 'Galería guardada como borrador');
+    onOpenGalleryEditor(g.id);
   };
 
   const copyGalleryLink = async (g: GalleryItem) => {
@@ -636,7 +637,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 : 'bg-zinc-800 text-zinc-400'
                             }`}
                           >
-                            {gallery.isPublished ? 'Publicada' : 'Borrador'}
+                            {gallery.isTemplate ? 'Plantilla' : gallery.isPublished ? 'Publicada' : 'Borrador'}
                           </button>
                         </div>
                       </div>

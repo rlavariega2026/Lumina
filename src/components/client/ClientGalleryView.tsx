@@ -1,3 +1,4 @@
+import { apiUrl, readPublicGallery } from '../../services/cloud';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -34,18 +35,47 @@ import { TEMPLATES_CONFIG } from '../../constants/templates';
 
 interface ClientGalleryViewProps {
   galleryId: string;
+  publicRoute?: string;
   onBackToAdmin?: () => void;
   isPreviewMode?: boolean;
 }
 
 export const ClientGalleryView: React.FC<ClientGalleryViewProps> = ({
   galleryId,
+  publicRoute,
   onBackToAdmin,
   isPreviewMode = false,
 }) => {
   const [gallery, setGallery] = useState<GalleryItem | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lockedName, setLockedName] = useState('');
+  const [publicError, setPublicError] = useState('');
+  const [publicUrl, setPublicUrl] = useState('');
+  const [demo, setDemo] = useState(false);
+  const [installHelp, setInstallHelp] = useState(false);
+
+  const loadPublic = async (pin?: string) => {
+    if (!publicRoute) return;
+    const result = await readPublicGallery(publicRoute, pin);
+    if ('locked' in result) { setLockedName(result.name); return; }
+    setLockedName('');
+    setGallery(result.gallery);
+    const preferences = readVisitorPhotos(result.gallery.id);
+    setPhotos(result.photos.map(photo => ({ ...photo, ...preferences[photo.id] })));
+    setPublicUrl(result.url);
+    setDemo(result.mode === 'demo');
+    setIsUnlocked(true);
+  };
+
+  const requestFullscreen = (event: React.MouseEvent) => {
+    if (!publicRoute || document.fullscreenElement || window.matchMedia('(display-mode: standalone)').matches
+      || !(event.target instanceof Element) || event.target.closest('button,a,input,select,textarea,form,label,[role="button"],[role="dialog"],[contenteditable],[data-lumina-interactive],video,audio')) return;
+    const root = document.documentElement;
+    const showHelp = () => { if (/iPhone|iPad|iPod/.test(navigator.userAgent)) setInstallHelp(true); };
+    if (root.requestFullscreen && document.fullscreenEnabled !== false) void root.requestFullscreen().catch(showHelp);
+    else showHelp();
+  };
 
   // Security & Locks
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -64,6 +94,15 @@ export const ClientGalleryView: React.FC<ClientGalleryViewProps> = ({
   const [zipProgress, setZipProgress] = useState<{ percent: number; text: string } | null>(null);
 
   const galleryContentRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!publicRoute) return;
+    const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (!manifest) return;
+    const original = manifest.href;
+    manifest.href = apiUrl('manifest', { start: location.pathname + location.search });
+    return () => { manifest.href = original; };
+  }, [publicRoute]);
 
   // Load gallery data
   const loadGalleryData = async () => {
@@ -101,17 +140,32 @@ export const ClientGalleryView: React.FC<ClientGalleryViewProps> = ({
   };
 
   useEffect(() => {
-    loadGalleryData();
+    if (publicRoute) void loadPublic().catch(error => setPublicError(error.message)).finally(() => setLoading(false));
+    else void loadGalleryData();
     return () => {
       audioController.stop();
     };
-  }, [galleryId]);
+  }, [galleryId, publicRoute]);
 
   const toggleMusic = () => {
     if (!gallery) return;
     const playing = audioController.toggle(gallery.music);
     setIsMusicPlaying(playing);
   };
+
+  function readVisitorPhotos(id: string): Record<string, Pick<PhotoItem, 'isFavorite' | 'isPrintSelected'>> {
+    try { return JSON.parse(localStorage.getItem('lumina-selection-' + id) || '{}'); }
+    catch { return {}; }
+  }
+
+  function saveVisitorPhoto(photo: PhotoItem) {
+    if (!gallery) return;
+    try {
+      const preferences = readVisitorPhotos(gallery.id);
+      preferences[photo.id] = { isFavorite: photo.isFavorite, isPrintSelected: photo.isPrintSelected };
+      localStorage.setItem('lumina-selection-' + gallery.id, JSON.stringify(preferences));
+    } catch { /* selection still works in this view */ }
+  }
 
   const handleToggleFavorite = async (photoId: string) => {
     const updated = photos.map((p) => {
@@ -122,7 +176,8 @@ export const ClientGalleryView: React.FC<ClientGalleryViewProps> = ({
     });
     setPhotos(updated);
     const photoToUpdate = updated.find((p) => p.id === photoId);
-    if (photoToUpdate) {
+    if (photoToUpdate && publicRoute) saveVisitorPhoto(photoToUpdate);
+    if (photoToUpdate && !publicRoute) {
       await storageService.savePhotoRecord(photoToUpdate);
       if (gallery) {
         await storageService.incrementStat(gallery.id, 'favoritesCount');
@@ -139,7 +194,8 @@ export const ClientGalleryView: React.FC<ClientGalleryViewProps> = ({
     });
     setPhotos(updated);
     const photoToUpdate = updated.find((p) => p.id === photoId);
-    if (photoToUpdate) {
+    if (photoToUpdate && publicRoute) saveVisitorPhoto(photoToUpdate);
+    if (photoToUpdate && !publicRoute) {
       await storageService.savePhotoRecord(photoToUpdate);
     }
   };
@@ -159,7 +215,7 @@ export const ClientGalleryView: React.FC<ClientGalleryViewProps> = ({
           setZipProgress({ percent, text });
         }
       );
-      await storageService.incrementStat(gallery.id, 'zipDownloadsCount');
+      if (!publicRoute) await storageService.incrementStat(gallery.id, 'zipDownloadsCount');
     } finally {
       setTimeout(() => {
         setIsDownloadingZip(false);
@@ -171,6 +227,9 @@ export const ClientGalleryView: React.FC<ClientGalleryViewProps> = ({
   const scrollToGallery = () => {
     galleryContentRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  if (publicError) return <main className="grid min-h-dvh place-items-center bg-zinc-950 p-8 text-zinc-100"><p role="alert">{publicError}</p></main>;
+  if (lockedName) return <PinLockScreen galleryName={lockedName} verifyPin={loadPublic} onUnlock={() => setIsUnlocked(true)} />;
 
   if (loading) {
     return (
@@ -238,10 +297,19 @@ export const ClientGalleryView: React.FC<ClientGalleryViewProps> = ({
   const favorites = photos.filter((p) => p.isFavorite);
   const printSelections = photos.filter((p) => p.isPrintSelected);
 
-  const galleryPublicUrl = `${window.location.origin}?gallery=${gallery.slug || gallery.id}`;
+  const galleryPublicUrl = publicUrl || gallery.publication?.url || `${window.location.origin}${import.meta.env.BASE_URL}?gallery=${encodeURIComponent(gallery.slug || gallery.id)}`;
 
   return (
-    <div className={`min-h-screen ${template.bgColor} ${template.fontBody} text-zinc-100 selection:bg-amber-500/20 selection:text-amber-200`}>
+    <div onClick={requestFullscreen} className={`lumina-public-gallery min-h-screen ${template.bgColor} ${template.fontBody} text-zinc-100 selection:bg-amber-500/20 selection:text-amber-200`}>
+      {demo && <div className="lumina-demo" aria-hidden="true">
+        <img src={`${import.meta.env.BASE_URL}lav-digital.png`} alt="" />
+        <strong>DEMO</strong>
+        <span>Versión de demostración • LAV Digital MKT</span>
+      </div>}
+      {installHelp && <div data-lumina-interactive className="fixed inset-x-4 bottom-4 z-[65] mx-auto max-w-sm rounded-xl bg-zinc-900 p-3">
+        En Safari puedes usar Compartir y Agregar a inicio.
+        <button onClick={() => setInstallHelp(false)} className="ml-2 underline">Cerrar</button>
+      </div>}
       {/* 1. Cover Hero Section */}
       <CoverHero
         gallery={gallery}
@@ -253,7 +321,7 @@ export const ClientGalleryView: React.FC<ClientGalleryViewProps> = ({
 
       {/* 2. Client Top Navigation Bar Contract (Sticky below cover) */}
       <div
-        ref={galleryContentRef}
+        ref={galleryContentRef} data-lumina-interactive
         className="sticky top-0 z-40 bg-zinc-950/85 backdrop-blur-md border-y border-zinc-800/80 px-4 sm:px-8 py-3 flex items-center justify-between gap-4"
       >
         {/* Zone 1: Gallery Brand / Title */}
@@ -406,7 +474,7 @@ export const ClientGalleryView: React.FC<ClientGalleryViewProps> = ({
               comments: [...(gallery.comments || []), newComment],
             };
             setGallery(updated);
-            await storageService.saveGallery(updated);
+            if (!publicRoute) await storageService.saveGallery(updated);
           }}
         />
       )}

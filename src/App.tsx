@@ -21,6 +21,9 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { GalleryEditor } from './components/admin/GalleryEditor';
 import { ClientGalleryView } from './components/client/ClientGalleryView';
 import { PWAInstallButton } from './components/common/PWAInstallButton';
+import { AccountPanel, Login } from './components/admin/Access';
+import { Account, sessionAction } from './services/session';
+import { loadCloudWorkspace, migrateLocalGalleries } from './services/cloud';
 
 type AppView = 'admin_login' | 'admin_dashboard' | 'gallery_editor' | 'client_view';
 
@@ -28,126 +31,54 @@ export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('admin_dashboard');
   const [activeGalleryId, setActiveGalleryId] = useState<string>(INITIAL_GALLERY_ID);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(true); // Default true for immediate seamless testing
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginError, setLoginError] = useState(false);
+  const [user, setUser] = useState<Account | null>(null);
+  const [loadingWorkspace, setLoadingWorkspace] = useState(true);
+  const [showAccounts, setShowAccounts] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [migrating, setMigrating] = useState(false);
+  const [workspaceRevision, setWorkspaceRevision] = useState(0);
+  const publishedRoute = window.location.pathname.match(/\/Lumina\/portafolios\/([a-z0-9-]+\/[a-z0-9-]+)\/?$/)?.[1]
+    || new URLSearchParams(window.location.search).get('gallery');
 
-  // Initialize DB and Seed Data
-  useEffect(() => {
-    initializeSeedData().catch((err) => console.error('Seed data initialization error:', err));
-
-    // Check if URL has ?gallery=slug_or_id
-    const params = new URLSearchParams(window.location.search);
-    const galleryParam = params.get('gallery');
-    if (galleryParam) {
-      storageService.getGalleryBySlug(galleryParam).then((g) => {
-        if (g) {
-          setActiveGalleryId(g.id);
-          setIsPreviewMode(false);
-          setCurrentView('client_view');
-        }
-      });
-    }
-  }, []);
-
-  const handleAdminLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = loginPassword.trim().toLowerCase();
-    if (clean === 'admin' || clean === 'admin2026' || clean === '1234' || clean === 'fotografo' || clean === '') {
-      setIsAuthenticated(true);
+  const openWorkspace = async (account: Account) => {
+    setLoadingWorkspace(true);
+    try {
+      await loadCloudWorkspace();
+      await initializeSeedData();
+      setUser(account);
       setCurrentView('admin_dashboard');
-      setLoginError(false);
-    } else {
-      setLoginError(true);
-      setTimeout(() => setLoginError(false), 2000);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'No se pudo abrir el panel');
+    } finally {
+      setLoadingWorkspace(false);
     }
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setCurrentView('admin_login');
+  useEffect(() => {
+    if (publishedRoute) return;
+    const expire = () => { setUser(null); setShowAccounts(false); setCurrentView('admin_login'); };
+    window.addEventListener('lav-session-expired', expire);
+    void sessionAction('status')
+      .then(result => result.user ? openWorkspace(result.user) : setLoadingWorkspace(false))
+      .catch(() => setLoadingWorkspace(false));
+    return () => window.removeEventListener('lav-session-expired', expire);
+  }, [publishedRoute]);
+
+  const handleLogout = async () => {
+    try {
+      await sessionAction('logout', {});
+      window.dispatchEvent(new Event('lav-session-expired'));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'No se pudo cerrar sesión');
+    }
   };
 
-  // -------------------------------------------------------------
-  // VIEW: CLIENT GALLERY VIEW
-  // -------------------------------------------------------------
+  if (publishedRoute) return <ClientGalleryView galleryId={publishedRoute} publicRoute={publishedRoute} />;
+  if (loadingWorkspace) return <main className="p-8 text-zinc-100">Cargando Lumina…</main>;
+  if (!user) return <><Login onLogin={account => void openWorkspace(account)} />{notice && <p role="alert">{notice}</p>}</>;
   if (currentView === 'client_view') {
-    return (
-      <ClientGalleryView
-        galleryId={activeGalleryId}
-        isPreviewMode={isPreviewMode}
-        onBackToAdmin={
-          isAuthenticated
-            ? () => {
-                setCurrentView(isPreviewMode ? 'gallery_editor' : 'admin_dashboard');
-              }
-            : undefined
-        }
-      />
-    );
-  }
-
-  // -------------------------------------------------------------
-  // VIEW: ADMIN LOGIN GATE
-  // -------------------------------------------------------------
-  if (!isAuthenticated || currentView === 'admin_login') {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 text-zinc-100 select-none">
-        <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl text-center space-y-6">
-          <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-xl">
-            <Camera className="w-8 h-8" />
-          </div>
-
-          <div>
-            <span className="text-[10px] font-mono uppercase tracking-widest text-amber-400 font-semibold">
-              Acceso Administrativo
-            </span>
-            <h2 className="text-xl font-bold text-white mt-1">Lumina Studio Pro</h2>
-            <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">
-              Ingresa al panel del fotógrafo para gestionar galerías, clientes y entregas de alta calidad.
-            </p>
-          </div>
-
-          <form onSubmit={handleAdminLogin} className="space-y-4">
-            <div>
-              <input
-                type="password"
-                placeholder="Contraseña de Administrador"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                className={`w-full bg-zinc-950 border rounded-xl px-4 py-2.5 text-xs text-white text-center tracking-widest outline-none transition ${
-                  loginError ? 'border-rose-500' : 'border-zinc-700 focus:border-amber-400'
-                }`}
-              />
-              {loginError && (
-                <p className="text-[11px] text-rose-400 mt-1 font-medium">Contraseña incorrecta.</p>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-xl text-xs transition cursor-pointer shadow-lg shadow-amber-500/10 flex items-center justify-center gap-2"
-            >
-              <span>Acceder al Panel</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
-
-          <div className="pt-2 border-t border-zinc-800/80 text-[11px] text-zinc-500 space-y-1">
-            <p>Contraseña por defecto: <code className="text-amber-400 font-mono">admin2026</code> o presiona Acceder.</p>
-            <button
-              onClick={() => {
-                setActiveGalleryId(INITIAL_GALLERY_ID);
-                setCurrentView('client_view');
-              }}
-              className="text-amber-400/80 hover:text-amber-300 underline cursor-pointer"
-            >
-              O ver la Galería de Clientes directamente
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return <ClientGalleryView galleryId={activeGalleryId} isPreviewMode={isPreviewMode}
+      onBackToAdmin={() => setCurrentView(isPreviewMode ? 'gallery_editor' : 'admin_dashboard')} />;
   }
 
   // -------------------------------------------------------------
@@ -224,10 +155,27 @@ export default function App() {
         </div>
       </header>
 
+      <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-3 px-4 pt-4 text-xs">
+        <button disabled={migrating} onClick={async () => {
+          setMigrating(true);
+          try {
+            const result = await migrateLocalGalleries(setNotice);
+            setNotice(`Galerías copiadas: ${result.copied}. Ya guardadas: ${result.skipped}.`);
+            setCurrentView('admin_dashboard');
+            setWorkspaceRevision(value => value + 1);
+          } catch (error) {
+            setNotice(error instanceof Error ? error.message : 'No se pudo completar la copia');
+          } finally { setMigrating(false); }
+        }} className="rounded-xl border border-zinc-700 px-3 py-2">Copiar galerías de este navegador</button>
+        {user.role === 'superadmin' && <button onClick={() => setShowAccounts(true)} className="rounded-xl border border-zinc-700 px-3 py-2">Administración de usuarios</button>}
+        {notice && <p role="status">{notice}</p>}
+      </div>
+      {showAccounts && user.role === 'superadmin' && <div className="text-zinc-900"><AccountPanel onClose={() => setShowAccounts(false)} /></div>}
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {currentView === 'admin_dashboard' && (
           <AdminDashboard
+            key={workspaceRevision}
             onOpenGalleryEditor={(id) => {
               setActiveGalleryId(id);
               setCurrentView('gallery_editor');

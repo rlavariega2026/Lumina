@@ -34,10 +34,9 @@ export class ZipDownloadService {
 
     if (blobs) {
       targetBlob = type === 'original' ? blobs.originalBlob : blobs.previewBlob;
-    } else if (photo.originalUrl) {
-      // If fetched from URL
-      const resp = await fetch(photo.originalUrl);
-      targetBlob = await resp.blob();
+    } else {
+      const url = type === 'original' ? photo.originalUrl : photo.previewUrl;
+      if (url) { const resp = await fetch(url); if (resp.ok) targetBlob = await resp.blob(); }
     }
 
     if (!targetBlob) {
@@ -91,10 +90,10 @@ Todos los derechos reservados © ${new Date().getFullYear()}.
 
       if (blobs) {
         blob = useOriginals ? blobs.originalBlob : blobs.previewBlob;
-      } else if (photo.originalUrl) {
+      } else {
         try {
-          const resp = await fetch(photo.originalUrl);
-          blob = await resp.blob();
+          const url = useOriginals ? photo.originalUrl : photo.previewUrl;
+          if (url) { const resp = await fetch(url); if (resp.ok) blob = await resp.blob(); }
         } catch {
           console.warn(`Could not fetch photo ${photo.id}`);
         }

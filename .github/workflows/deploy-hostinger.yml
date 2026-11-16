@@ -35,6 +35,8 @@ jobs:
         run: |
           test -f dist/index.html
           test -d dist/assets
+          test -s dist/.htaccess
+          for file in dist/*.php; do php -l "$file" || exit 1; done
           echo "Lumina production build verified."
 
       - name: Deploy to lavdigitalagency.com actual document root
@@ -49,8 +51,6 @@ jobs:
           # FTP login starts at /public_html; the real domain document root is /domains/lavdigitalagency.com/public_html.
           server-dir: ../domains/lavdigitalagency.com/public_html/Lumina/
           dangerous-clean-slate: false
-          exclude: |
-            **/.htaccess
 
       - name: Verify files in the actual Hostinger document root
         env:
@@ -68,13 +68,21 @@ jobs:
           ftp.login(os.environ["FTP_USERNAME"], os.environ["FTP_PASSWORD"])
           ftp.cwd("/domains/lavdigitalagency.com/public_html/Lumina")
           entries = ftp.nlst(".")
+          ftp.voidcmd("TYPE I")
           print("VERIFIED REMOTE DIRECTORY:", ftp.pwd())
           for entry in entries:
               print("REMOTE FILE:", entry)
-          required = ["index.html", "assets"]
+          required = ["index.html", "assets", "api.php"]
+          if not ftp.size(".htaccess"):
+              raise SystemExit("Lumina rewrite file missing")
           missing = [name for name in required if name not in entries]
           if missing:
               raise SystemExit("Deployment verification failed; missing: " + ", ".join(missing))
           print("HOSTINGER FILE VERIFICATION PASSED")
           ftp.quit()
           PY
+
+      - name: Verify Lumina over HTTPS
+        run: |
+          curl -fsS --retry 4 https://lavdigitalagency.com/Lumina/ | grep -q "/Lumina/assets/"
+          curl -fsS --retry 4 "https://lavdigitalagency.com/Lumina/api.php?r=health" | grep -q '"success":true'

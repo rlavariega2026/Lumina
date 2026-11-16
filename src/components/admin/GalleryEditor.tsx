@@ -1,3 +1,5 @@
+import { syncGallery } from '../../services/cloud';
+import { PublishGallery } from './PublishGallery';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -56,6 +58,8 @@ export const GalleryEditor: React.FC<GalleryEditorProps> = ({
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [activeTab, setActiveTab] = useState<EditorTab>('general');
   const [isSaving, setIsSaving] = useState(false);
+  const [showPublish, setShowPublish] = useState(false);
+  const [operationError, setOperationError] = useState('');
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [toastText, setToastText] = useState('¡Cambios guardados con éxito!');
   const [showHostingerModal, setShowHostingerModal] = useState(false);
@@ -86,12 +90,19 @@ export const GalleryEditor: React.FC<GalleryEditorProps> = ({
       ...(updatedData || {}),
       updatedAt: new Date().toISOString(),
     };
-    setGallery(updated);
-    await storageService.saveGallery(updated);
-    setIsSaving(false);
-    setToastText('¡Cambios guardados con éxito!');
-    setShowSavedToast(true);
-    setTimeout(() => setShowSavedToast(false), 2500);
+    setOperationError('');
+    try {
+      setGallery(updated);
+      await storageService.saveGallery(updated);
+      const saved = await syncGallery(updated);
+      await storageService.restoreCloudProject(saved.gallery, saved.photos);
+      setGallery(saved.gallery);
+      setToastText('Galería guardada en Hostinger');
+      setShowSavedToast(true);
+      setTimeout(() => setShowSavedToast(false), 2500);
+    } catch (error) {
+      setOperationError(error instanceof Error ? error.message : 'No se pudo guardar en Hostinger.');
+    } finally { setIsSaving(false); }
   };
 
   const handleOpenSaveAs = () => {
@@ -113,8 +124,10 @@ export const GalleryEditor: React.FC<GalleryEditorProps> = ({
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
       const newSlug = `${cleanSlug || 'galeria'}-${Date.now().toString(36)}`;
+      await storageService.saveGallery(gallery);
       const newCopy = await storageService.duplicateGallery(gallery.id, finalName, newSlug);
       if (newCopy) {
+        await syncGallery(newCopy);
         setShowSaveAsModal(false);
         setGallery(newCopy);
         const pList = await storageService.getPhotosByGallery(newCopy.id);
@@ -124,7 +137,7 @@ export const GalleryEditor: React.FC<GalleryEditorProps> = ({
         setTimeout(() => setShowSavedToast(false), 3000);
       }
     } catch (err) {
-      console.error('Error al guardar como:', err);
+      setOperationError(err instanceof Error ? err.message : 'No se pudo guardar la copia.');
     } finally {
       setIsSavingAs(false);
     }
@@ -200,6 +213,26 @@ export const GalleryEditor: React.FC<GalleryEditorProps> = ({
             <span>Guardar como...</span>
           </button>
 
+          <button disabled={isSaving || isSavingAs} className="rounded-xl bg-zinc-800 px-3 py-2 text-xs font-semibold" onClick={async () => {
+            const name = window.prompt('Nombre de la plantilla', gallery.eventName);
+            if (!name?.trim()) return;
+            setIsSaving(true);
+            setOperationError('');
+            try {
+              await storageService.saveGallery(gallery);
+              const copy = await storageService.duplicateGallery(gallery.id, name.trim());
+              if (!copy) throw new Error('No se pudo crear la plantilla.');
+              const template = { ...copy, isTemplate: true };
+              await syncGallery(template);
+              await storageService.saveGallery(template);
+              setToastText('Plantilla guardada en Hostinger.');
+              setShowSavedToast(true);
+              setTimeout(() => setShowSavedToast(false), 2500);
+            } catch (error) {
+              setOperationError(error instanceof Error ? error.message : 'No se pudo guardar la plantilla.');
+            } finally { setIsSaving(false); }
+          }}>Guardar plantilla</button>
+          <button disabled={isSaving || isSavingAs || gallery.isTemplate} onClick={() => setShowPublish(true)} className="rounded-xl bg-violet-700 px-3 py-2 text-xs font-semibold">Publicar en Hostinger</button>
           {/* Botón Guardar */}
           <button
             onClick={() => handleSave()}
@@ -221,6 +254,12 @@ export const GalleryEditor: React.FC<GalleryEditorProps> = ({
         </div>
       </div>
 
+      {operationError && <p role="alert" className="text-sm text-rose-400">{operationError}</p>}
+      {showPublish && <PublishGallery gallery={gallery} onClose={() => setShowPublish(false)} onPublished={async publication => {
+        const updated = { ...gallery, publication, isPublished: true };
+        setGallery(updated);
+        await storageService.saveGallery(updated);
+      }} />}
       {/* Editor Main Navigation Tabs */}
       <div className="flex items-center gap-1.5 p-1.5 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-x-auto scrollbar-none">
         {navTabs.map((tab) => {

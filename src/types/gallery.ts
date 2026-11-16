@@ -192,7 +192,16 @@ export interface GalleryComment {
   createdAt: string;
 }
 
+export interface GalleryPublication {
+  client: string;
+  slug: string;
+  url: string;
+  mode: 'demo' | 'final';
+}
+
 export interface GalleryItem {
+  publication?: GalleryPublication;
+  isTemplate?: boolean;
   id: string;
   slug: string;
   eventName: string;

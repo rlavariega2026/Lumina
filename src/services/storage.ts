@@ -17,6 +17,7 @@ const DB_VERSION = 1;
 // 'settings' -> key: key
 
 class StorageService {
+  constructor(private readonly databaseName: string) {}
   private dbPromise: Promise<IDBDatabase> | null = null;
   private blobUrlCache: Map<string, { original: string; preview: string; thumb: string }> = new Map();
 
@@ -24,7 +25,7 @@ class StorageService {
     if (this.dbPromise) return this.dbPromise;
 
     this.dbPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      const request = indexedDB.open(this.databaseName, DB_VERSION);
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
@@ -153,7 +154,8 @@ class StorageService {
       updatedAt: new Date().toISOString(),
     };
 
-    await this.saveGallery(copy);
+    delete copy.publication;
+    copy.isTemplate = false;
 
     // Duplicate photos as well
     const photos = await this.getPhotosByGallery(id);
@@ -168,6 +170,7 @@ class StorageService {
         isPrintSelected: false,
       };
 
+      if (copy.heroPhotoId === p.id) copy.heroPhotoId = newPhotoId;
       if (blobs) {
         await this.savePhotoWithBlobs(newPhoto, blobs.originalBlob, blobs.previewBlob, blobs.thumbBlob);
       } else {
@@ -175,6 +178,7 @@ class StorageService {
       }
     }
 
+    await this.saveGallery(copy);
     return copy;
   }
 
@@ -449,6 +453,21 @@ class StorageService {
     await this.saveGallery(gallery);
   }
 
+  async restoreCloudProject(gallery: GalleryItem, photos: PhotoItem[]): Promise<void> {
+    const previous = await this.getPhotosByGallery(gallery.id);
+    const incomingIds = new Set(photos.map(photo => photo.id));
+    // This database is a working copy. The original pre-update database is separate.
+    for (const photo of previous) if (!incomingIds.has(photo.id)) await this.deletePhoto(photo.id);
+    for (const photo of photos) await this.savePhotoRecord(photo);
+    const db = await this.getDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('galleries', 'readwrite');
+      tx.objectStore('galleries').put(gallery);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   // --- Full Database Export for Backup / Hostinger Migration ---
   async exportBackup(): Promise<string> {
     const galleries = await this.getGalleries();
@@ -465,4 +484,5 @@ class StorageService {
   }
 }
 
-export const storageService = new StorageService();
+export const legacyStorage = new StorageService(DB_NAME);
+export const storageService = new StorageService(DB_NAME + '_cloud');

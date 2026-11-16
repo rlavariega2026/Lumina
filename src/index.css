@@ -27,3 +27,34 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(161, 161, 170, 0.4);
 }
+
+.lumina-public-gallery {
+  width: 100%;
+  min-height: 100dvh;
+  overflow-x: clip;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.lumina-demo {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: .4rem;
+  text-align: center;
+  pointer-events: none;
+  opacity: .23;
+  color: #b98cf1;
+  font-weight: 800;
+}
+
+.lumina-demo img { width: min(42vw, 250px); max-height: 24vh; object-fit: contain; }
+.lumina-demo strong {
+  font-size: clamp(3rem, 13vw, 9rem);
+  line-height: 1;
+  background: linear-gradient(90deg, #54a2ff, #9a66ed, #cc87ef);
+  color: transparent;
+  background-clip: text;
+}
