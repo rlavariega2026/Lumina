@@ -167,8 +167,15 @@ if ($route === 'projects' && in_array($method, ['PUT','DELETE'], true)) {
     if ($method === 'DELETE') {
         unset($rows[$projectId]);
         $published = load_json('published');
+        $oldRoutes = $published[$projectId]['routes'] ?? [];
         unset($published[$projectId]);
         save_json('published', $published);
+        foreach ($oldRoutes as $oldRoute) {
+            if (!preg_match('~^[a-z0-9-]+/[a-z0-9-]+$~D', $oldRoute)) continue;
+            $directory = __DIR__ . '/portafolios/' . $oldRoute;
+            if (is_dir($directory) && !is_link($directory)) @rmdir($directory);
+            if (is_dir(dirname($directory)) && !is_link(dirname($directory))) @rmdir(dirname($directory));
+        }
     } else {
         if (($gallery['id'] ?? '') !== $projectId || !is_array($body['photos'] ?? null)) json_response(['error'=>'Proyecto incompleto'], 422);
         if (!empty($body['migration']) && isset($rows[$projectId])) json_response(['error'=>'Ya hay una copia en Hostinger. Elige Guardar como para subir otra versión.'], 409);

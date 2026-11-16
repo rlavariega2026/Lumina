@@ -438,7 +438,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const copyGalleryLink = async (g: GalleryItem) => {
-    const url = `${window.location.origin}?gallery=${g.slug || g.id}`;
+    const url = g.publication?.url;
+    if (!url) {
+      showToast('Publica la galería en Hostinger para copiar su enlace.');
+      onOpenGalleryEditor(g.id);
+      return;
+    }
     const ok = await copyToClipboard(url);
     if (ok) {
       setCopiedLinkGalleryId(g.id);
@@ -701,7 +706,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                           {/* QR Code */}
                           <button
-                            onClick={() => setQrTargetGallery(gallery)}
+                            onClick={() => gallery.publication ? setQrTargetGallery(gallery) : onOpenGalleryEditor(gallery.id)}
                             className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition cursor-pointer"
                             title="Ver Código QR"
                           >
@@ -986,13 +991,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <input
                   type="text"
                   readOnly
-                  value={`${window.location.origin}?gallery=${linkTargetGallery.slug || linkTargetGallery.id}`}
+                  value={linkTargetGallery.publication?.url || ''}
                   className="bg-transparent text-xs text-zinc-200 font-mono w-full outline-none select-all"
                 />
                 <button
                   type="button"
                   onClick={async () => {
-                    const url = `${window.location.origin}?gallery=${linkTargetGallery.slug || linkTargetGallery.id}`;
+                    const url = linkTargetGallery.publication?.url || '';
                     await copyToClipboard(url);
                     setCopiedLinkGalleryId(linkTargetGallery.id);
                     showToast('¡Enlace copiado al portapapeles!');
@@ -1009,7 +1014,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  onOpenClientView(linkTargetGallery.id);
+                  if (linkTargetGallery.publication) window.open(linkTargetGallery.publication.url, '_blank', 'noopener,noreferrer');
                   setLinkTargetGallery(null);
                 }}
                 className="flex-1 flex items-center justify-center gap-2 py-2 px-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
@@ -1045,7 +1050,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               Cerrar
             </button>
             <QRCodeGenerator
-              url={`${window.location.origin}?gallery=${qrTargetGallery.slug || qrTargetGallery.id}`}
+              url={qrTargetGallery.publication?.url || ''}
               title={qrTargetGallery.eventName}
             />
           </div>
