@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { Account, sessionAction } from '../../services/session';
 
 const logo = `${import.meta.env.BASE_URL}lav-digital.png`;
-const field = 'w-full rounded-xl border border-stone-300 bg-white px-3 py-2';
+const field = 'w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-zinc-950 caret-zinc-950 placeholder:text-zinc-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600';
 const button = 'rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold';
 
 export function Login({ onLogin }: { onLogin: (user: Account) => void }) {
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
-  return <main className="grid min-h-dvh place-items-center bg-[#FDFBF7] p-4">
+  const [showPassword, setShowPassword] = useState(false);
+  return <main className="grid min-h-dvh place-items-center bg-[#FDFBF7] p-4 text-zinc-950">
     <form className="w-full max-w-sm space-y-4 rounded-3xl border border-stone-200 bg-white p-7 shadow-sm" onSubmit={async event => {
       event.preventDefault();
       const form = new FormData(event.currentTarget);
@@ -26,7 +27,19 @@ export function Login({ onLogin }: { onLogin: (user: Account) => void }) {
       <img src={logo} alt="LAV Digital MKT" className="mx-auto h-16 w-auto object-contain" />
       <h1 className="text-center font-serif text-2xl font-bold">Lumina Studio</h1>
       <label className="block">Usuario<input className={field} name="username" autoComplete="username" required /></label>
-      <label className="block">Contraseña<input className={field} name="password" type="password" autoComplete="current-password" required /></label>
+      <div>
+        <label htmlFor="lumina-login-password" className="block">Contraseña</label>
+        <div className="relative">
+          <input id="lumina-login-password" className={`${field} pr-24`} name="password"
+            type={showPassword ? 'text' : 'password'} autoComplete="current-password"
+            autoCapitalize="none" spellCheck={false} required />
+          <button type="button" aria-controls="lumina-login-password"
+            className="absolute inset-y-0 right-2 px-2 text-sm font-medium text-zinc-700"
+            onClick={() => setShowPassword(visible => !visible)}>
+            {showPassword ? 'Ocultar' : 'Mostrar'}
+          </button>
+        </div>
+      </div>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <button type="submit" disabled={pending} className="w-full rounded-xl bg-stone-900 px-4 py-3 font-semibold text-white disabled:opacity-60">{pending ? 'Ingresando…' : 'Iniciar sesión'}</button>
     </form>
